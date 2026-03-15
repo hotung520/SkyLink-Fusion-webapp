@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SkyLink Fusion - 三地極速競賽</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: transparent; margin: 0; padding: 10px; }
+        
+        .bg-light-race { background-color: #f8fafc; }
+        
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 淺色雷達掃描動畫 (配合香港主題改為紅色微光) */
+        .radar-box { position: relative; width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(239, 68, 68, 0.2); overflow: hidden; background: #ffffff; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .radar-box::before { content: ''; position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; background: conic-gradient(from 0deg, transparent 70%, rgba(239, 68, 68, 0.4) 100%); transform-origin: 0 0; animation: radarSpin 2s linear infinite; }
+        .radar-box::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; background: #ef4444; border-radius: 50%; box-shadow: 0 0 15px 4px rgba(239, 68, 68, 0.5); }
+        @keyframes radarSpin { 100% { transform: rotate(360deg); } }
+
+        /* 進度條賽道風格 */
+        .track-bar { background: #e2e8f0; border-radius: 20px; overflow: hidden; position: relative; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); }
+        .track-fill { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); height: 100%; position: relative; display: flex; justify-content: flex-end; align-items: center; padding-right: 4px; }
+        
+        /* 賽車終點線圖案 */
+        .finish-line { position: absolute; right: 0; top: 0; bottom: 0; width: 12px; background-image: linear-gradient(45deg, #333 25%, transparent 25%, transparent 75%, #333 75%, #333), linear-gradient(45deg, #333 25%, transparent 25%, transparent 75%, #333 75%, #333); background-size: 8px 8px; background-position: 0 0, 4px 4px; background-color: #f8fafc; opacity: 0.5;}
+
+        /* 地圖修正 */
+        .leaflet-container { z-index: 10 !important; font-family: 'Noto Sans TC', sans-serif; border-radius: 12px; }
+        .custom-map-marker { display: flex; justify-content: center; align-items: center; border-radius: 50%; border: 2px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); color: white; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div id="race-root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const GOAL_SCORE = 10; 
+        const MATCH_TIME_LIMIT = 3600; 
+
+        // 三地真實地標座標
+        const REGION_DATA = {
+            sz: {
+                id: 'sz', name: '深圳代表', color: 'bg-sky-500', icon: 'fas fa-fighter-jet', mapColor: '#0ea5e9',
+                coords: [ [22.518, 113.945], [22.533, 114.055], [22.538, 113.973], [22.553, 114.052], [22.535, 113.996], [22.548, 114.054], [22.595, 114.305], [22.484, 113.916], [22.541, 113.882], [22.576, 113.941] ]
+            },
+            hk: {
+                id: 'hk', name: '香港代表', color: 'bg-red-500', icon: 'fas fa-car-side', mapColor: '#ef4444',
+                coords: [ [22.281, 114.154], [22.293, 114.169], [22.275, 114.150], [22.301, 114.156], [22.301, 114.159], [22.313, 114.041], [22.293, 114.174], [22.254, 113.905], [22.283, 114.155], [22.283, 114.173] ]
+            },
+            mo: {
+                id: 'mo', name: '澳門代表', color: 'bg-emerald-500', icon: 'fas fa-motorcycle', mapColor: '#10b981',
+                coords: [ [22.197, 113.540], [22.179, 113.536], [22.186, 113.555], [22.186, 113.531], [22.193, 113.539], [22.147, 113.560], [22.153, 113.556], [22.196, 113.549], [22.197, 113.541], [22.143, 113.562] ]
+            }
+        };
+
+        const MiniMap = ({ regionId, score, config }) => {
+            const mapRef = useRef(null);
+            const mapInstance = useRef(null);
+            const markerInstance = useRef(null);
+
+            const safeScore = Math.min(score, config.coords.length - 1);
+            const currentPos = config.coords[safeScore];
+
+            useEffect(() => {
+                if (!mapRef.current) return;
+                
+                if (!mapInstance.current) {
+                    mapInstance.current = L.map(mapRef.current, { zoomControl: false, dragging: false, scrollWheelZoom: false }).setView(currentPos, 13);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(mapInstance.current);
+
+                    const customIcon = L.divIcon({
+                        className: 'dummy',
+                        html: `<div class="custom-map-marker" style="background-color: ${config.mapColor}; width: 20px; height: 20px;"><i class="${config.icon} text-[10px]"></i></div>`,
+                        iconSize: [20, 20], iconAnchor: [10, 10]
+                    });
+
+                    markerInstance.current = L.marker(currentPos, { icon: customIcon }).addTo(mapInstance.current);
+                } else {
+                    mapInstance.current.setView(currentPos, 13, { animate: true, duration: 1 });
+                    if (markerInstance.current) {
+                        markerInstance.current.setLatLng(currentPos);
+                    }
+                }
+            }, [score]);
+
+            return <div ref={mapRef} className="w-full h-[70px] bg-slate-100 mt-2 shadow-inner border border-slate-200 pointer-events-none"></div>;
+        };
+
+        const RaceApp = () => {
+            const [gameState, setGameState] = useState('idle');
+            const [timeLeft, setTimeLeft] = useState(MATCH_TIME_LIMIT);
+            
+            const [myName, setMyName] = useState('我');
+            const [scores, setScores] = useState({ sz: 0, hk: 0, mo: 0 }); // hk:我, sz:對手1, mo:對手2
+            const [isScanning, setIsScanning] = useState(false);
+            const [winner, setWinner] = useState(null);
+
+            useEffect(() => {
+                const storedName = localStorage.getItem('accountName') || '探索者';
+                setMyName(storedName);
+            }, []);
+
+            useEffect(() => {
+                let timerInterval;
+                let opponentInterval;
+
+                if (gameState === 'playing') {
+                    timerInterval = setInterval(() => {
+                        setTimeLeft(prev => {
+                            if (prev <= 1) { endGame('timeout'); return 0; }
+                            return prev - 1;
+                        });
+                    }, 1000);
+
+                    // AI 對手自動推進 (深圳 與 澳門)
+                    opponentInterval = setInterval(() => {
+                        setScores(prev => {
+                            const newScores = { ...prev };
+                            const randomOpponent = Math.random() > 0.5 ? 'sz' : 'mo'; // 這次對手換成深圳和澳門
+                            
+                            if (newScores[randomOpponent] < GOAL_SCORE) {
+                                newScores[randomOpponent] += 1;
+                            }
+                            
+                            if (newScores.sz >= GOAL_SCORE) { endGame('sz'); }
+                            else if (newScores.mo >= GOAL_SCORE) { endGame('mo'); }
+                            
+                            return newScores;
+                        });
+                    }, Math.floor(Math.random() * 12000) + 8000);
+                }
+
+                return () => {
+                    clearInterval(timerInterval);
+                    clearInterval(opponentInterval);
+                };
+            }, [gameState]);
+
+            const startMatchmaking = () => {
+                setGameState('searching');
+                setTimeout(() => {
+                    setScores({ sz: 0, hk: 0, mo: 0 });
+                    setTimeLeft(MATCH_TIME_LIMIT);
+                    setGameState('playing');
+                }, 2500);
+            };
+
+            const handleMyCheckin = () => {
+                if (scores.hk >= GOAL_SCORE || isScanning) return; // 我現在是 hk
+                setIsScanning(true);
+                
+                setTimeout(() => {
+                    setScores(prev => {
+                        const newScores = { ...prev, hk: prev.hk + 1 };
+                        if (newScores.hk >= GOAL_SCORE) {
+                            setTimeout(() => endGame('hk'), 500);
+                        }
+                        return newScores;
+                    });
+                    setIsScanning(false);
+                }, 1000);
+            };
+
+            const endGame = (reason) => {
+                setGameState('finished');
+                setScores(currentScores => {
+                    if (reason === 'hk' || (reason === 'timeout' && currentScores.hk >= Math.max(currentScores.sz, currentScores.mo))) {
+                        setWinner('hk');
+                    } else if (reason === 'sz' || (reason === 'timeout' && currentScores.sz >= Math.max(currentScores.hk, currentScores.mo))) {
+                        setWinner('sz');
+                    } else if (reason === 'mo' || (reason === 'timeout' && currentScores.mo >= Math.max(currentScores.sz, currentScores.hk))) {
+                        setWinner('mo');
+                    }
+                    return currentScores;
+                });
+            };
+
+            const formatTime = (seconds) => {
+                const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const s = (seconds % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            };
+
+            return (
+                <div className="bg-light-race w-full min-h-full rounded-3xl p-4 flex flex-col relative overflow-hidden shadow-inner border border-slate-200">
+                    
+                    {/* --- 狀態 1: 閒置 --- */}
+                    {gameState === 'idle' && (
+                        <div className="flex-1 flex flex-col items-center justify-center animate-fade-in text-center z-10">
+                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-6 border-4 border-white shadow-md">
+                                <i className="fas fa-flag-checkered text-4xl text-red-500"></i>
+                            </div>
+                            <h2 className="text-2xl font-black mb-2 text-slate-800 tracking-widest">三地極速對決</h2>
+                            <p className="text-xs text-slate-500 mb-8 max-w-[240px] leading-relaxed font-bold">
+                                系統已為你分配【香港賽區】。1小時內率先完成所屬地區 10 個實境地標打卡者獲勝！
+                            </p>
+                            <button onClick={startMatchmaking} className="w-[85%] py-4 rounded-2xl bg-red-500 text-white font-black text-lg shadow-lg shadow-red-500/30 active:scale-95 transition-all">
+                                進入匹配佇列 <i className="fas fa-satellite-dish ml-1"></i>
+                            </button>
+                        </div>
+                    )}
+
+                    {/* --- 狀態 2: 尋找中 --- */}
+                    {gameState === 'searching' && (
+                        <div className="flex-1 flex flex-col items-center justify-center animate-fade-in z-10">
+                            <div className="radar-box mb-8"></div>
+                            <h2 className="text-lg font-black text-slate-700 tracking-widest animate-pulse">正在匹配深圳與澳門代表...</h2>
+                            <p className="text-xs text-slate-400 mt-2 font-mono font-bold">CONNECTING TO LBS SERVER</p>
+                        </div>
+                    )}
+
+                    {/* --- 狀態 3: 比賽中 --- */}
+                    {gameState === 'playing' && (
+                        <div className="flex-1 flex flex-col animate-fade-in z-10 pb-16">
+                            
+                            {/* 頂部倒數計時 */}
+                            <div className="flex justify-center items-center mb-4 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                                <i className="fas fa-stopwatch text-slate-400 text-xl mr-3"></i>
+                                <div className="text-3xl font-black text-slate-800 font-mono tracking-wider">
+                                    {formatTime(timeLeft)}
+                                </div>
+                            </div>
+
+                            <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-1">
+                                
+                                {/* 玩家卡片 (香港 - 我) */}
+                                <div className="bg-red-50 p-3 rounded-2xl shadow-sm border border-red-200 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-bl-lg">YOU</div>
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="text-xs font-black text-red-600"><i className="fas fa-map-marker-alt mr-1"></i>香港代表 - {myName}</span>
+                                        <span className="text-sm font-black text-slate-800 font-mono">{scores.hk} <span className="text-[10px] text-slate-400">/ 10</span></span>
+                                    </div>
+                                    <div className="w-full h-4 track-bar bg-red-100">
+                                        <div className={`track-fill ${REGION_DATA.hk.color}`} style={{ width: `${(scores.hk / GOAL_SCORE) * 100}%` }}>
+                                            <i className={`${REGION_DATA.hk.icon} text-white text-[9px]`}></i>
+                                        </div>
+                                        <div className="finish-line"></div>
+                                    </div>
+                                    <MiniMap regionId="hk" score={scores.hk} config={REGION_DATA.hk} />
+                                </div>
+
+                                {/* 玩家卡片 (深圳 - AI) */}
+                                <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="text-xs font-black text-sky-500"><i className="fas fa-map-marker-alt mr-1"></i>深圳代表 - 追風者</span>
+                                        <span className="text-sm font-black text-slate-800 font-mono">{scores.sz} <span className="text-[10px] text-slate-400">/ 10</span></span>
+                                    </div>
+                                    <div className="w-full h-4 track-bar">
+                                        <div className={`track-fill ${REGION_DATA.sz.color}`} style={{ width: `${(scores.sz / GOAL_SCORE) * 100}%` }}>
+                                            <i className={`${REGION_DATA.sz.icon} text-white text-[9px]`}></i>
+                                        </div>
+                                        <div className="finish-line"></div>
+                                    </div>
+                                    <MiniMap regionId="sz" score={scores.sz} config={REGION_DATA.sz} />
+                                </div>
+
+                                {/* 玩家卡片 (澳門 - AI) */}
+                                <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="text-xs font-black text-emerald-500"><i className="fas fa-map-marker-alt mr-1"></i>澳門代表 - 飛影</span>
+                                        <span className="text-sm font-black text-slate-800 font-mono">{scores.mo} <span className="text-[10px] text-slate-400">/ 10</span></span>
+                                    </div>
+                                    <div className="w-full h-4 track-bar">
+                                        <div className={`track-fill ${REGION_DATA.mo.color}`} style={{ width: `${(scores.mo / GOAL_SCORE) * 100}%` }}>
+                                            <i className={`${REGION_DATA.mo.icon} text-white text-[9px]`}></i>
+                                        </div>
+                                        <div className="finish-line"></div>
+                                    </div>
+                                    <MiniMap regionId="mo" score={scores.mo} config={REGION_DATA.mo} />
+                                </div>
+                            </div>
+
+                            {/* 獨立打卡按鈕 (香港專屬紅色) */}
+                            <div className="absolute bottom-4 left-4 right-4">
+                                <button 
+                                    onClick={handleMyCheckin} 
+                                    disabled={isScanning}
+                                    className={`w-full py-4 rounded-2xl font-black text-white text-lg shadow-lg flex items-center justify-center transition-all ${isScanning ? 'bg-slate-400 scale-95' : 'bg-red-500 active:scale-95 shadow-red-500/30'}`}
+                                >
+                                    {isScanning ? <><i className="fas fa-spinner fa-spin mr-2"></i> 掃描定位中...</> : <><i className="fas fa-crosshairs mr-2"></i> 抵達目前地標！立即打卡</>}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- 狀態 4: 結算畫面 --- */}
+                    {gameState === 'finished' && (
+                        <div className="flex-1 flex flex-col items-center justify-center animate-fade-in text-center z-10">
+                            {winner === 'hk' ? (
+                                <div className="w-24 h-24 bg-yellow-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-lg">
+                                    <i className="fas fa-trophy text-5xl text-yellow-500"></i>
+                                </div>
+                            ) : (
+                                <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-lg">
+                                    <i className="fas fa-times text-5xl text-slate-400"></i>
+                                </div>
+                            )}
+                            
+                            <h2 className="text-3xl font-black mb-1 text-slate-800 tracking-widest">
+                                {winner === 'hk' ? '香港獲勝！' : winner === 'sz' ? '深圳獲勝！' : '澳門獲勝！'}
+                            </h2>
+                            <p className="text-sm font-bold text-slate-500 mb-8">
+                                {winner === 'hk' ? '恭喜！你以驚人的速度完成了探索。' : `很可惜，${REGION_DATA[winner].name}率先到達終點。`}
+                            </p>
+
+                            <div className="w-[85%] bg-white rounded-2xl p-4 mb-8 border border-slate-100 shadow-sm">
+                                <div className="flex justify-between mb-3 border-b border-slate-100 pb-3">
+                                    <span className="text-red-500 font-black text-sm">香港 ({myName})</span>
+                                    <span className="text-slate-800 font-mono font-black text-sm">{scores.hk} / 10</span>
+                                </div>
+                                <div className="flex justify-between mb-3 border-b border-slate-100 pb-3">
+                                    <span className="text-sky-500 font-black text-sm">深圳 (AI)</span>
+                                    <span className="text-slate-800 font-mono font-black text-sm">{scores.sz} / 10</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-emerald-500 font-black text-sm">澳門 (AI)</span>
+                                    <span className="text-slate-800 font-mono font-black text-sm">{scores.mo} / 10</span>
+                                </div>
+                            </div>
+
+                            <button onClick={() => setGameState('idle')} className="w-[85%] py-4 rounded-2xl bg-slate-800 text-white font-black text-lg shadow-lg active:scale-95 transition-all">
+                                重新挑戰
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('race-root'));
+        root.render(<RaceApp />);
+    </script>
+</body>
+</html>

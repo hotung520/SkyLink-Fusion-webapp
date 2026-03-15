@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: transparent; margin: 0; padding: 10px; }
+        
+        .animate-fade-down { animation: fadeDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; transform-origin: top; }
+        @keyframes fadeDown {
+            0% { opacity: 0; transform: translateY(-10px) scaleY(0.95); }
+            100% { opacity: 1; transform: translateY(0) scaleY(1); }
+        }
+        .leaflet-container { z-index: 10 !important; font-family: 'Noto Sans TC', sans-serif; }
+        .leaflet-popup-content b { font-size: 14px; font-weight: 900; color: #1e293b; }
+        .custom-map-marker { display: flex; justify-content: center; align-items: center; border-radius: 50%; border: 2px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); color: white; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div id="checkin-root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        const CATEGORIES = [
+            { id: 'test', name: '系統測試區', icon: 'fas fa-vial', color: 'text-purple-500', bg: 'bg-purple-100', mapColor: '#a855f7' },
+            { id: 'sz', name: '深圳 Shenzhen', icon: 'fas fa-city', color: 'text-sky-500', bg: 'bg-sky-100', mapColor: '#0ea5e9' },
+            { id: 'hk', name: '香港 Hong Kong', icon: 'fas fa-map-marker-alt', color: 'text-red-500', bg: 'bg-red-100', mapColor: '#ef4444' },
+            { id: 'mo', name: '澳門 Macau', icon: 'fas fa-camera', color: 'text-emerald-500', bg: 'bg-emerald-100', mapColor: '#10b981' }
+        ];
+
+        const LANDMARKS = [
+            { id: 'test-1', category: 'test', name: '萬能測試地方', lat: 0, lng: 0, isTest: true, icon: 'fas fa-vial text-purple-500' },
+            { id: 'sz-1', category: 'sz', name: '深圳灣春筍 (華潤總部)', lat: 22.518, lng: 113.945, icon: 'fas fa-building text-sky-500' },
+            { id: 'sz-2', category: 'sz', name: '平安金融中心', lat: 22.533, lng: 114.055, icon: 'fas fa-chart-line text-sky-500' },
+            { id: 'sz-3', category: 'sz', name: '世界之窗', lat: 22.538, lng: 113.973, icon: 'fas fa-globe-asia text-sky-500' },
+            { id: 'sz-4', category: 'sz', name: '蓮花山公園', lat: 22.553, lng: 114.052, icon: 'fas fa-tree text-sky-500' },
+            { id: 'sz-5', category: 'sz', name: '華僑城創意文化園', lat: 22.535, lng: 113.996, icon: 'fas fa-palette text-sky-500' },
+            { id: 'sz-6', category: 'sz', name: '深圳當代藝術與城市規劃館', lat: 22.548, lng: 114.054, icon: 'fas fa-landmark text-sky-500' },
+            { id: 'sz-7', category: 'sz', name: '大梅沙海濱公園', lat: 22.595, lng: 114.305, icon: 'fas fa-umbrella-beach text-sky-500' },
+            { id: 'sz-8', category: 'sz', name: '蛇口海上世界', lat: 22.484, lng: 113.916, icon: 'fas fa-ship text-sky-500' },
+            { id: 'sz-9', category: 'sz', name: '歡樂港灣 (灣區之光)', lat: 22.541, lng: 113.882, icon: 'fas fa-dharmachakra text-sky-500' },
+            { id: 'sz-10', category: 'sz', name: '大疆創新天空之城', lat: 22.576, lng: 113.941, icon: 'fas fa-drone text-sky-500' },
+            { id: 'hk-1', category: 'hk', name: '香港大館', lat: 22.281, lng: 114.154, icon: 'fas fa-university text-red-500' },
+            { id: 'hk-2', category: 'hk', name: '維多利亞港 (尖沙咀)', lat: 22.293, lng: 114.169, icon: 'fas fa-water text-red-500' },
+            { id: 'hk-3', category: 'hk', name: '太平山頂', lat: 22.275, lng: 114.150, icon: 'fas fa-mountain text-red-500' },
+            { id: 'hk-4', category: 'hk', name: '香港故宮文化博物館', lat: 22.301, lng: 114.156, icon: 'fas fa-crown text-red-500' },
+            { id: 'hk-5', category: 'hk', name: 'M+ 視覺文化博物館', lat: 22.301, lng: 114.159, icon: 'fas fa-images text-red-500' },
+            { id: 'hk-6', category: 'hk', name: '香港迪士尼樂園', lat: 22.313, lng: 114.041, icon: 'fas fa-ticket-alt text-red-500' },
+            { id: 'hk-7', category: 'hk', name: '星光大道', lat: 22.293, lng: 114.174, icon: 'fas fa-star text-red-500' },
+            { id: 'hk-8', category: 'hk', name: '天壇大佛', lat: 22.254, lng: 113.905, icon: 'fas fa-monument text-red-500' },
+            { id: 'hk-9', category: 'hk', name: '中環街市', lat: 22.283, lng: 114.155, icon: 'fas fa-store text-red-500' },
+            { id: 'hk-10', category: 'hk', name: '金紫荊廣場', lat: 22.283, lng: 114.173, icon: 'fas fa-seedling text-red-500' },
+            { id: 'mo-1', category: 'mo', name: '大三巴牌坊', lat: 22.197, lng: 113.540, icon: 'fas fa-church text-emerald-500' },
+            { id: 'mo-2', category: 'mo', name: '澳門旅遊塔', lat: 22.179, lng: 113.536, icon: 'fas fa-broadcast-tower text-emerald-500' },
+            { id: 'mo-3', category: 'mo', name: '澳門科學館', lat: 22.186, lng: 113.555, icon: 'fas fa-flask text-emerald-500' },
+            { id: 'mo-4', category: 'mo', name: '媽閣廟', lat: 22.186, lng: 113.531, icon: 'fas fa-place-of-worship text-emerald-500' },
+            { id: 'mo-5', category: 'mo', name: '議事亭前地', lat: 22.193, lng: 113.539, icon: 'fas fa-map-signs text-emerald-500' },
+            { id: 'mo-6', category: 'mo', name: '威尼斯人度假村', lat: 22.147, lng: 113.560, icon: 'fas fa-gondola text-emerald-500' },
+            { id: 'mo-7', category: 'mo', name: '官也街', lat: 22.153, lng: 113.556, icon: 'fas fa-shopping-bag text-emerald-500' },
+            { id: 'mo-8', category: 'mo', name: '東望洋燈塔', lat: 22.196, lng: 113.549, icon: 'fas fa-lightbulb text-emerald-500' },
+            { id: 'mo-9', category: 'mo', name: '澳門博物館', lat: 22.197, lng: 113.541, icon: 'fas fa-history text-emerald-500' },
+            { id: 'mo-10', category: 'mo', name: '巴黎人鐵塔', lat: 22.143, lng: 113.562, icon: 'fas fa-tower-observation text-emerald-500' }
+        ];
+
+        const CityMap = ({ landmarks, categoryConfig }) => {
+            const mapRef = useRef(null);
+            const mapInstance = useRef(null);
+
+            useEffect(() => {
+                if (!mapRef.current) return;
+                if (mapInstance.current) mapInstance.current.remove();
+
+                const lats = landmarks.map(l => l.lat);
+                const lngs = landmarks.map(l => l.lng);
+                const centerLat = (Math.max(...lats) + Math.min(...lats)) / 2;
+                const centerLng = (Math.max(...lngs) + Math.min(...lngs)) / 2;
+
+                mapInstance.current = L.map(mapRef.current, { zoomControl: false }).setView([centerLat, centerLng], 12);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; OpenStreetMap'
+                }).addTo(mapInstance.current);
+
+                landmarks.forEach(l => {
+                    const iconClass = l.icon.split('text-')[0].trim();
+                    const customIcon = L.divIcon({
+                        className: 'dummy',
+                        html: `<div class="custom-map-marker" style="background-color: ${categoryConfig.mapColor}; width: 28px; height: 28px;"><i class="${iconClass}"></i></div>`,
+                        iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14]
+                    });
+                    L.marker([l.lat, l.lng], { icon: customIcon }).addTo(mapInstance.current).bindPopup(`<b>${l.name}</b>`);
+                });
+
+                return () => { if (mapInstance.current) mapInstance.current.remove(); };
+            }, [landmarks, categoryConfig]);
+
+            return <div ref={mapRef} className="w-full h-48 bg-slate-100 rounded-xl mb-3 shadow-inner border border-slate-200"></div>;
+        };
+
+        const CheckinApp = () => {
+            const videoRef = useRef(null);
+            const [scanning, setScanning] = useState(false);
+            const [target, setTarget] = useState(null);
+            const [statusMsg, setStatusMsg] = useState('');
+            const [expandedCategory, setExpandedCategory] = useState(null);
+            
+            // 新增：紀錄已打卡的 ID 陣列
+            const [checkedInLocs, setCheckedInLocs] = useState([]);
+
+            // 初始讀取已打卡資料
+            useEffect(() => {
+                const saved = JSON.parse(localStorage.getItem('checkedInLocs') || '[]');
+                setCheckedInLocs(saved);
+            }, []);
+
+            const toggleCategory = (catId) => {
+                setExpandedCategory(prev => prev === catId ? null : catId);
+            };
+
+            const startCheckin = async (landmark) => {
+                setTarget(landmark);
+                setScanning(true);
+                setStatusMsg(`正在啟動相機...`);
+                
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    if(videoRef.current) videoRef.current.srcObject = stream;
+                } catch (err) { 
+                    alert("請允許相機權限以掃描建築物！"); 
+                    setScanning(false); 
+                    return; 
+                }
+
+                setStatusMsg(`AI 正在辨識【${landmark.name}】特徵...`);
+
+                const verifyLocation = (pos) => {
+                    setTimeout(() => {
+                        if (videoRef.current && videoRef.current.srcObject) {
+                            videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+                        }
+                        setScanning(false);
+                        
+                        let isNear = false;
+                        if (landmark.isTest) {
+                            isNear = true;
+                        } else if (pos) {
+                            const { latitude, longitude } = pos.coords;
+                            isNear = Math.abs(latitude - landmark.lat) < 0.05 && Math.abs(longitude - landmark.lng) < 0.05;
+                        }
+
+                        if (isNear) {
+                            // 打卡成功：更新本地儲存與狀態
+                            const newCheckedIn = [...checkedInLocs, landmark.id];
+                            setCheckedInLocs(newCheckedIn);
+                            localStorage.setItem('checkedInLocs', JSON.stringify(newCheckedIn));
+                            
+                            // 通知主系統增加 XP
+                            window.parent.postMessage({ type: 'CHECKIN_SUCCESS', landmark: landmark.name, xp: 100 }, '*');
+                            alert(`🎉 成功在【${landmark.name}】打卡！`);
+                        } else {
+                            alert(`❌ GPS 定位不符！你目前不在【${landmark.name}】附近。`);
+                        }
+                        setTarget(null);
+                    }, 3000); 
+                };
+
+                if (landmark.isTest) {
+                    verifyLocation(null);
+                } else {
+                    if (navigator.geolocation) {
+                        setStatusMsg(`正在核對 GPS 座標...`);
+                        navigator.geolocation.getCurrentPosition(
+                            verifyLocation, 
+                            (error) => {
+                                console.error("定位失敗詳細資訊:", error);
+                                let errorMessage = "定位失敗！\n";
+                                
+                                switch(error.code) {
+                                    case error.PERMISSION_DENIED:
+                                        errorMessage += "原因：瀏覽器或系統拒絕了定位權限。";
+                                        break;
+                                    case error.POSITION_UNAVAILABLE:
+                                        errorMessage += "原因：無法取得位置資訊。\n(👉 提示：如果使用 Mac，請務必開啟 Wi-Fi！)";
+                                        break;
+                                    case error.TIMEOUT:
+                                        errorMessage += "原因：取得位置逾時。";
+                                        break;
+                                    default:
+                                        errorMessage += "原因：發生未知錯誤。";
+                                        break;
+                                }
+                                
+                                alert(errorMessage + `\n(錯誤代碼: ${error.code})`);
+                                setScanning(false);
+                            },
+                            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } 
+                        );
+                    } else {
+                        alert("您的設備不支援定位功能。");
+                        setScanning(false);
+                    }
+                }
+            };
+            return (
+                <div className="space-y-4 pb-10">
+                    <h2 className="text-xl font-black text-slate-800 mb-2"><i className="fas fa-camera-retro text-sky-500 mr-2"></i>實地打卡掃描</h2>
+                    
+                    {scanning && target && (
+                        <div className="bg-slate-900 rounded-3xl overflow-hidden relative aspect-[3/4] border-4 border-sky-400 shadow-lg">
+                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-sky-900/60 backdrop-blur-sm z-10 p-6 text-center">
+                                <i className="fas fa-crosshairs text-6xl text-sky-400 animate-spin mb-4"></i>
+                                <p className="text-white font-bold tracking-widest text-lg">{statusMsg}</p>
+                                {target.isTest && <p className="text-purple-300 text-xs mt-2">✨ 測試模式：將自動跳過地理驗證</p>}
+                            </div>
+                        </div>
+                    )}
+
+                    {!scanning && (
+                        <div className="space-y-3">
+                            {CATEGORIES.map(cat => {
+                                const catLandmarks = LANDMARKS.filter(l => l.category === cat.id);
+                                if (catLandmarks.length === 0) return null;
+                                
+                                const isExpanded = expandedCategory === cat.id;
+
+                                // 計算該地區已打卡數量
+                                const checkInCount = catLandmarks.filter(l => checkedInLocs.includes(l.id)).length;
+
+                                return (
+                                    <div key={cat.id} className="flex flex-col gap-2">
+                                        <button onClick={() => toggleCategory(cat.id)} className="w-full p-4 rounded-2xl bg-white shadow-sm border border-slate-200 flex justify-between items-center transition-all active:scale-[0.98]">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-8 h-8 rounded-full ${cat.bg} flex items-center justify-center text-sm ${cat.color}`}>
+                                                    <i className={cat.icon}></i>
+                                                </div>
+                                                <h3 className="font-black text-slate-800 text-sm">{cat.name}</h3>
+                                                {/* 顯示該區域進度 */}
+                                                <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{checkInCount}/{catLandmarks.length}</span>
+                                            </div>
+                                            <div className={`w-6 h-6 flex items-center justify-center text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+                                                <i className="fas fa-chevron-down text-sm"></i>
+                                            </div>
+                                        </button>
+
+                                        {isExpanded && (
+                                            <div className="pl-2 ml-4 border-l-2 border-slate-200 animate-fade-down pt-2">
+                                                {cat.id !== 'test' && <CityMap landmarks={catLandmarks} categoryConfig={cat} />}
+
+                                                <div className="flex flex-col gap-3">
+                                                    {catLandmarks.map(l => {
+                                                        const isCheckedIn = checkedInLocs.includes(l.id);
+                                                        
+                                                        // 判斷是否已打卡來套用不同樣式
+                                                        const cardStyle = isCheckedIn 
+                                                            ? "bg-slate-50 border-slate-200 opacity-60 grayscale" 
+                                                            : (l.isTest ? "bg-purple-50 border-purple-200" : "bg-white border-slate-200");
+                                                        
+                                                        const btnStyle = isCheckedIn
+                                                            ? "bg-slate-300 text-slate-500 shadow-none cursor-not-allowed"
+                                                            : (l.isTest ? "bg-purple-500 hover:bg-purple-400 text-white shadow-md active:scale-95" : "bg-sky-500 hover:bg-sky-400 text-white shadow-md active:scale-95");
+
+                                                        return (
+                                                            <div key={l.id} className={`p-4 rounded-xl shadow-sm border flex justify-between items-center transition-all ${cardStyle}`}>
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-lg">
+                                                                        <i className={l.icon}></i>
+                                                                    </div>
+                                                                    <div>
+                                                                        <h3 className={`font-black text-sm ${l.isTest ? 'text-purple-800' : 'text-slate-800'}`}>{l.name}</h3>
+                                                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                                                            {l.isTest ? '無限制 (測試專用)' : `LAT:${l.lat} LNG:${l.lng}`}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <button 
+                                                                    onClick={() => !isCheckedIn && startCheckin(l)} 
+                                                                    disabled={isCheckedIn}
+                                                                    className={`px-4 py-2 rounded-xl font-black text-xs whitespace-nowrap ${btnStyle}`}
+                                                                >
+                                                                    {isCheckedIn ? '已打卡' : '掃描打卡'}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('checkin-root'));
+        root.render(<CheckinApp />);
+    </script>
+</body>
+</html>

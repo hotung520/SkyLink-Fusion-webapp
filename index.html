@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SkyLink Fusion - 登入與設定</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f0f4f8; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .phone-container { width: 375px; height: 750px; background: #ffffff; border-radius: 45px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15); border: 14px solid #1e293b; position: relative; overflow: hidden; }
+        .screen-content { height: 100%; overflow-y: auto; background-color: #ffffff; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
+        .soft-card { background: white; border-radius: 32px; box-shadow: 0 4px 24px rgba(0,0,0,0.04); border: 1px solid #f8fafc; width: 100%; max-width: 320px; padding: 32px 24px; }
+        .animate-pop-in { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        input { transition: all 0.3s ease; }
+        input:focus { border-color: #0891b2; box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.1); }
+    </style>
+</head> 
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // 移到外部：獨立的 LoginScreen 元件
+        const LoginScreen = ({ isRegister, setIsRegister, username, setUsername, handleAuth }) => (
+            <div className="soft-card animate-pop-in text-center">
+                <div className="w-16 h-16 bg-cyan-50 rounded-full flex items-center justify-center text-cyan-600 text-3xl mx-auto mb-4"><i className="fas fa-paper-plane"></i></div>
+                <h2 className="text-2xl font-black text-slate-800 mb-1">SkyLink Fusion</h2>
+                <p className="text-xs font-bold text-slate-400 mb-6">{isRegister ? '建立新帳號' : '登入你的健康低空帳號'}</p>
+                
+                <form onSubmit={handleAuth} className="space-y-4">
+                    <div className="relative">
+                        <i className="fas fa-user absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" required placeholder="使用者名稱" value={username} onChange={(e) => setUsername(e.target.value)}
+                            className="w-full py-3 pl-10 pr-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-slate-700 text-sm" />
+                    </div>
+                    <div className="relative">
+                        <i className="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="password" required placeholder="密碼" 
+                            className="w-full py-3 pl-10 pr-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-slate-700 text-sm" />
+                    </div>
+                    
+                    <button type="submit" className="w-full py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl font-black shadow-lg shadow-cyan-600/20 transition-all active:scale-95">
+                        {isRegister ? '註冊並開始' : '登入'}
+                    </button>
+                </form>
+                
+                <div className="mt-6 text-xs font-bold text-slate-400 cursor-pointer hover:text-cyan-600 transition" onClick={() => setIsRegister(!isRegister)}>
+                    {isRegister ? '已有帳號？點此登入' : '還沒有帳號？立即註冊'}
+                </div>
+            </div>
+        );
+
+        // 移到外部：獨立的 SetupScreen 元件
+        const SetupScreen = ({ finishSetup }) => {
+            const [item, setItem] = useState('');
+            const [amount, setAmount] = useState('');
+
+            return (
+                <div className="soft-card animate-pop-in text-center">
+                    <div className="text-5xl mb-4 text-cyan-600"><i className="fas fa-running"></i></div>
+                    <h2 className="text-xl font-black text-slate-800 mb-2">啟動健康紀錄</h2>
+                    <p className="text-xs font-bold text-slate-400 mb-6">設定一個每日步數目標吧！</p>
+                    
+                    <div className="space-y-3 mb-6">
+                        <input type="text" value={item} onChange={(e) => setItem(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-cyan-400 font-bold text-slate-700 text-sm text-center" placeholder="目標名稱 (例：每日健走)" />
+                        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-cyan-400 font-bold text-slate-700 text-sm text-center" placeholder="目標步數 (例：10000)" />
+                    </div>
+                    
+                    <button onClick={() => finishSetup(item, Number(amount))} disabled={!item || amount <= 0} className={`w-full py-3.5 rounded-2xl font-black transition-all ${item && amount > 0 ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-600/20 active:scale-95' : 'bg-slate-100 text-slate-400'}`}>確認目標 ⚡</button>
+                    <button onClick={() => finishSetup('', 0)} className="w-full mt-3 py-3 rounded-2xl font-bold text-sm text-slate-400 bg-white border border-slate-200 hover:bg-slate-50 transition-all active:scale-95">暫時忽略</button>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [step, setStep] = useState('login');
+            const [isRegister, setIsRegister] = useState(false);
+            const [username, setUsername] = useState('');
+
+            useEffect(() => {
+                if (window.location.hash === '#setup') {
+                    setStep('setup');
+                }
+            }, []);
+
+            const handleAuth = (e) => {
+                e.preventDefault();
+                if (username.trim()) {
+                    localStorage.setItem('accountName', username.trim());
+                } else {
+                    localStorage.setItem('accountName', '未命名用戶');
+                }
+                setStep('transition');
+            };
+
+            useEffect(() => {
+                if (step === 'transition') {
+                    const timer = setTimeout(() => { setStep('setup'); }, 3000); 
+                    return () => clearTimeout(timer);
+                }
+            }, [step]);
+
+            const finishSetup = (itemName, amount) => {
+                if (itemName && amount) {
+                    localStorage.setItem('targetItem', itemName);
+                    localStorage.setItem('targetAmount', amount);
+                } else {
+                    localStorage.removeItem('targetItem');
+                    localStorage.removeItem('targetAmount');
+                }
+                window.location.href = 'part1.html';
+            };
+
+            return (
+                <div className="phone-container">
+                    <main className="screen-content">
+                        {step === 'login' && (
+                            <LoginScreen 
+                                isRegister={isRegister} 
+                                setIsRegister={setIsRegister} 
+                                username={username} 
+                                setUsername={setUsername} 
+                                handleAuth={handleAuth} 
+                            />
+                        )}
+                        {/* 注意：原始碼中有呼叫 part4.html，請確保該檔案存在或處理 404 */}
+                        {step === 'transition' && <iframe src="part4.html" className="w-full h-full border-none absolute inset-0 z-50"></iframe>}
+                        {step === 'setup' && <SetupScreen finishSetup={finishSetup} />}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

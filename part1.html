@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SkyLink Fusion - 智慧低空打卡系統</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f0f4f8; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        
+        .phone-container { width: 375px; height: 750px; border-radius: 45px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15); border: 14px solid #1e293b; position: relative; overflow: hidden; transition: background-color 0.5s ease; }
+        .screen-content { height: calc(100% - 70px); overflow-y: auto; padding: 24px 20px 40px 20px; }
+        .screen-content::-webkit-scrollbar { display: none; }
+        
+        .nav-bar { height: 70px; background: white; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-around; align-items: center; position: absolute; bottom: 0; width: 100%; z-index: 40; }
+        .nav-item { text-align: center; color: #94a3b8; cursor: pointer; transition: all 0.3s; width: 60px; position: relative; }
+        .nav-item.active { color: #0ea5e9; }
+        
+        .animate-pop-in { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+        .img-card { background: #ffffff; border-radius: 28px; border: 1px solid #f1f5f9; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
+        .value-box { background: #ffffff; border-radius: 16px; border: 4px solid #f8fafc; box-shadow: inset 0 2px 10px rgba(0,0,0,0.02), 0 10px 20px rgba(0,0,0,0.02); position: relative; }
+        .value-box::after { content: ''; position: absolute; bottom: -2px; left: 5%; width: 90%; height: 4px; background: #a5f3fc; box-shadow: 0 -4px 15px rgba(6, 182, 212, 0.5); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const REWARDS = [
+            { id: 'r1', reqLevel: 2 },
+            { id: 'r2', reqLevel: 5 },
+            { id: 'r3', reqLevel: 10 },
+            { id: 'r4', reqLevel: 50 },
+        ];
+
+        const ThemeModal = ({ onClose, currentLevel, currentTheme, setTheme }) => {
+            const themes = [
+                { id: 'white', name: '實驗室純白Lv.0', reqLevel: 0, bgClass: '#fafbfc' },
+                { id: 'blue', name: '科技微光藍Lv.5', reqLevel: 5, bgClass: '#f0f9ff' },
+                { id: 'silver', name: '重裝甲灰銀Lv.10', reqLevel: 10, bgClass: '#f1f5f9' },
+                { id: 'purple', name: '量子空間紫Lv.15', reqLevel: 15, bgClass: '#faf5ff' }
+            ];
+
+            return (
+                <div className="absolute inset-0 z-50 flex flex-col justify-end bg-slate-900/40 backdrop-blur-sm" onClick={onClose}>
+                    <div className="bg-[#f8fafc] w-full rounded-t-[32px] pt-6 pb-10 px-6 relative shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-[#0f172a]"><i className="fas fa-palette text-[#06b6d4] mr-2"></i> 系統底色設定</h2>
+                            <button onClick={onClose} className="w-8 h-8 bg-[#e2e8f0] text-slate-500 rounded-full font-bold">X</button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            {themes.map(t => {
+                                const isUnlocked = currentLevel >= t.reqLevel;
+                                const isSelected = currentTheme === t.bgClass;
+                                return (
+                                    <button key={t.id} onClick={() => isUnlocked && setTheme(t.bgClass)} 
+                                        className={`p-4 rounded-2xl border-2 flex flex-col items-center justify-center gap-2 h-28 bg-white transition-all ${isSelected ? 'border-[#06b6d4] shadow-[0_4px_15px_rgba(6,182,212,0.15)]' : 'border-[#f1f5f9]'} ${!isUnlocked ? 'opacity-60 cursor-not-allowed grayscale' : 'active:scale-95'}`}>
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${isSelected ? 'bg-cyan-50 text-[#06b6d4]' : 'bg-slate-100 text-slate-300'}`}>
+                                            {isSelected ? <i className="fas fa-check"></i> : (!isUnlocked ? <i className="fas fa-lock"></i> : <div className="w-5 h-5 rounded-full" style={{background: t.bgClass, border: '1px solid #cbd5e1'}}></div>)}
+                                        </div>
+                                        <span className={`text-xs font-black tracking-wide ${isUnlocked ? 'text-[#334155]' : 'text-slate-400'}`}>{t.name}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const UserModal = ({ onClose, currentAvatar, setAvatar }) => {
+            const avatars = ['fas fa-robot', 'fas fa-user-astronaut', 'fas fa-user-ninja', 'fas fa-user-secret'];
+            
+            return (
+                <div className="absolute inset-0 z-50 flex flex-col justify-end bg-slate-900/40 backdrop-blur-sm" onClick={onClose}>
+                    <div className="bg-[#f8fafc] w-full rounded-t-[32px] pt-6 pb-10 px-6 relative shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-5">
+                            <h2 className="text-xl font-black text-[#0f172a]"><i className="fas fa-user-circle text-[#0284c7] mr-2"></i> 用戶中心</h2>
+                            <button onClick={onClose} className="w-8 h-8 bg-[#e2e8f0] text-slate-500 rounded-full font-bold">X</button>
+                        </div>
+                        <div className="bg-white rounded-[24px] shadow-sm border border-[#f1f5f9] mb-4 overflow-hidden p-4">
+                            <p className="text-xs font-bold text-[#64748b] mb-3">系統預設</p>
+                            <div className="flex justify-between mb-2">
+                                {avatars.map((av, i) => (
+                                    <button key={i} onClick={() => setAvatar(av)} className={`w-14 h-14 rounded-full flex items-center justify-center text-3xl border-[4px] shadow-sm ${currentAvatar === av ? 'border-cyan-100 bg-cyan-50 text-cyan-600 scale-110' : 'border-[#f8fafc] bg-[#f1f5f9] text-slate-500'} transition-all active:scale-95`}>
+                                        <i className={av}></i>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('home');
+            const [xp, setXp] = useState(0); 
+            const level = Math.min(Math.floor(xp / 100) + 1, 500);
+            const [steps, setSteps] = useState(0); 
+            
+            const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+            const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+            const [currentTheme, setCurrentTheme] = useState('#fafbfc'); 
+            const [currentAvatar, setCurrentAvatar] = useState('fas fa-robot');
+            
+            const [accountName, setAccountName] = useState('設定名字');
+            const [targetItem, setTargetItem] = useState('');
+            const [targetAmount, setTargetAmount] = useState(0);
+
+            const [unclaimedCount, setUnclaimedCount] = useState(0);
+
+            const [stepRecords, setStepRecords] = useState([{ date: '2023-10-25', steps: 6540 }, { date: '2023-10-26', steps: 8210 }]);
+            
+            const exportStepsToExcel = () => {
+                const headers = ['日期', '步數'];
+                const rows = stepRecords.map(r => `${r.date},${r.steps}`);
+                const csvContent = "\uFEFF" + [headers.join(','), ...rows].join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute('download', '運動步數紀錄.csv');
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            };
+
+            useEffect(() => {
+                const storedName = localStorage.getItem('accountName');
+                if (storedName) setAccountName(storedName);
+
+                const storedItem = localStorage.getItem('targetItem');
+                const storedAmount = Number(localStorage.getItem('targetAmount')) || 0;
+                setTargetItem(storedItem || '');
+                setTargetAmount(storedAmount);
+
+                const claimedRewards = JSON.parse(localStorage.getItem('claimedRewards')) || [];
+                const available = REWARDS.filter(r => level >= r.reqLevel && !claimedRewards.includes(r.id)).length;
+                setUnclaimedCount(available);
+
+                const handleMessage = (event) => {
+                    if (event.data && event.data.type === 'CHECKIN_SUCCESS') {
+                        setXp(prev => prev + event.data.xp);
+                        
+                        const currentCheckins = parseInt(localStorage.getItem('totalCheckins')) || 0;
+                        localStorage.setItem('totalCheckins', currentCheckins + 1);
+                        
+                        const currentXp = parseInt(localStorage.getItem('userXP')) || 0;
+                        localStorage.setItem('userXP', currentXp + event.data.xp);
+                    }
+                    // 監聽 part7.html 的關閉請求
+                    if (event.data && event.data.type === 'CLOSE_REPORT') {
+                        setActiveTab('home');
+                    }
+                };
+                window.addEventListener('message', handleMessage);
+                return () => window.removeEventListener('message', handleMessage);
+            }, [level, activeTab]); 
+
+            const hasGoal = targetAmount > 0;
+            const progressPercent = hasGoal ? Math.min(Math.floor((steps / targetAmount) * 100), 100) : 0;
+
+            const addSteps = () => {
+                const amount = prompt("請輸入今日步數：", "1000");
+                if (amount && !isNaN(amount)) setSteps(prev => prev + Number(amount));
+            };
+
+            return (
+                <div className="phone-container" style={{ backgroundColor: currentTheme }}>
+                    <main className="screen-content">
+                        {activeTab === 'home' && (
+                            <div className="animate-pop-in">
+                                <header className="flex justify-between items-center mb-6 px-1">
+                                    <div>
+                                        <h1 className="text-2xl font-black text-[#1e293b] tracking-wide">每日運動</h1>
+                                        <p className="text-xs font-bold text-slate-500 mt-1">離目標更近一步！</p>
+                                    </div>
+                                    <div className="flex gap-3 relative z-10">
+                                        <button onClick={() => setIsThemeModalOpen(true)} className="w-[42px] h-[42px] bg-white rounded-full flex items-center justify-center text-cyan-600 border border-slate-100 shadow-sm active:scale-95 transition-transform"><i className="fas fa-palette text-lg"></i></button>
+                                        <button onClick={() => setIsUserModalOpen(true)} className="w-[42px] h-[42px] bg-white rounded-full flex items-center justify-center text-slate-500 border border-slate-100 shadow-sm active:scale-95 transition-transform"><i className="fas fa-user-astronaut text-lg"></i></button>
+                                    </div>
+                                </header>
+
+                                <div className="img-card p-4 mb-5 flex items-center gap-4">
+                                    <div className="w-[80px] h-[80px] bg-[#e2e8f0] rounded-full flex items-center justify-center relative shrink-0 border-4 border-white shadow-sm">
+                                        <i className={`${currentAvatar} text-4xl text-slate-500`}></i>
+                                        <div className="absolute -bottom-1 -right-1 bg-gradient-to-b from-green-300 to-green-500 w-6 h-8 rounded-md flex items-center justify-center text-white border-2 border-white shadow-sm"><i className="fas fa-bolt text-[10px]"></i></div>
+                                    </div>
+                                    <div className="flex-1 pr-2">
+                                        <div className="flex justify-between items-end mb-3">
+                                            <h2 className="font-black text-[#334155] text-lg">{accountName}</h2>
+                                            <span className="font-black text-xl text-[#0f172a] font-mono">Lv.{level}</span>
+                                        </div>
+                                        <div className="w-full h-3 bg-[#f1f5f9] rounded-full mb-1">
+                                            <div className="h-full bg-[#cbd5e1] rounded-full transition-all" style={{width: `${xp % 100}%`}}></div>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-slate-400 font-mono tracking-wider">XP: {xp % 100}/100</p>
+                                    </div>
+                                </div>
+
+                                <div className="img-card p-5 mb-5">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="font-black text-[#0891b2] text-[15px] flex items-center"><i className="fas fa-shoe-prints mr-2 text-lg"></i> 今日步數</h3>
+                                        
+                                        {!hasGoal ? (
+                                            <button onClick={() => window.location.href = 'index.html#setup'} className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 active:scale-95 transition-transform">
+                                                + 先設定目標
+                                            </button>
+                                        ) : (
+                                            <span className="text-xs font-bold text-cyan-600 bg-cyan-50 border border-cyan-100 px-3 py-1.5 rounded-lg">
+                                                任務: {targetItem}
+                                            </span>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="value-box w-[85%] aspect-[4/3] mx-auto flex items-center justify-center mb-6">
+                                        <span className="text-5xl font-black text-[#0f172a] font-mono tracking-tighter">{steps.toLocaleString()}</span>
+                                    </div>
+
+                                    <div className="w-full h-2.5 bg-[#f1f5f9] rounded-full mb-3">
+                                        <div className="h-full bg-[#cbd5e1] rounded-full transition-all" style={{width: `${progressPercent}%`}}></div>
+                                    </div>
+                                    <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                                        <span>離目標還有: {hasGoal ? Math.max(targetAmount - steps, 0) : '先設定目標'}</span>
+                                        <span>總需: {hasGoal ? targetAmount : '先設定目標'}</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 mb-5">
+                                    <div className="flex-1 img-card p-4 cursor-pointer active:scale-95 transition-transform" onClick={addSteps}>
+                                        <div className="w-[42px] h-[42px] bg-[#06b6d4] rounded-[16px] rounded-bl-sm mb-3 flex items-center justify-center text-white text-xl"><i className="fas fa-walking"></i></div>
+                                        <h3 className="font-black text-[#0f172a] mb-0.5 text-sm">手動紀錄</h3>
+                                        <p className="text-[10px] font-bold text-slate-400">輸入今日步數</p>
+                                    </div>
+                                    <div className="flex-1 img-card p-4 cursor-pointer active:scale-95 transition-transform" onClick={() => setActiveTab('report')}>
+                                        <div className="w-[42px] h-[42px] bg-[#3b82f6] rounded-[16px] rounded-bl-sm mb-3 flex items-center justify-center text-white text-xl"><i className="fas fa-headset"></i></div>
+                                        <h3 className="font-black text-[#0f172a] mb-0.5 text-sm">上報路面漏洞助手</h3>
+                                        <p className="text-[10px] font-bold text-slate-400">例如缺少綠化,交通燈失靈,地面凹凸</p>
+                                    </div>
+                                </div>
+
+                                <div className="img-card p-5 mb-[20px]">
+                                    <h3 className="font-black text-[#0f172a] flex items-center mb-6 text-[15px]"><i className="fas fa-server text-[#06b6d4] mr-2 text-lg"></i> 步數及消耗紀錄</h3>
+                                    <div className="w-full flex justify-center mb-10 mt-4">
+                                        <div className="w-10 h-44 bg-[#94a3b8] relative flex flex-col items-center border-x-[4px] border-[#cbd5e1]">
+                                            <div className="w-40 h-3 bg-[#e2e8f0] absolute top-[20%] rounded-sm shadow-sm"></div>
+                                            <div className="w-40 h-3 bg-[#e2e8f0] absolute top-[50%] rounded-sm shadow-sm"></div>
+                                            <div className="w-40 h-3 bg-[#e2e8f0] absolute top-[80%] rounded-sm shadow-sm"></div>
+                                            <div className="w-24 h-6 bg-[#94a3b8] absolute -bottom-6 rounded-t-sm"></div>
+                                            <div className="w-8 h-8 rounded-full bg-cyan-100 border-[3px] border-white absolute top-[3%] flex items-center justify-center text-cyan-400 text-[16px] shadow-sm z-10"><i className="fas fa-globe-asia"></i></div>
+                                        </div>
+                                    </div>
+                                    <button onClick={exportStepsToExcel} className="w-full py-3.5 mt-4 bg-[#f8fafc] border border-[#f1f5f9] rounded-2xl font-black text-[#334155] text-sm flex items-center justify-center active:scale-95 transition-transform"><i className="fas fa-file-excel text-[#10b981] mr-2 text-lg"></i> 輸出歷史紀錄 (Excel)</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'checkin' && (
+                            <div className="w-full h-full rounded-3xl overflow-hidden animate-pop-in border border-slate-100 shadow-sm bg-white">
+                                <iframe src="part2.html" allow="camera; geolocation" className="w-full h-full border-none"></iframe>
+                            </div>
+                        )}
+                        
+                        {activeTab === 'leaderboard' && (
+                            <div className="w-full h-full rounded-3xl overflow-hidden animate-pop-in border border-slate-100 shadow-sm bg-white">
+                                <iframe src="part5.html" className="w-full h-full border-none"></iframe>
+                            </div>
+                        )}
+                        
+                        {activeTab === 'race' && (
+                            <div className="w-full h-full rounded-3xl overflow-hidden animate-pop-in border border-slate-100 shadow-sm bg-slate-900">
+                                <iframe src="part6.html" className="w-full h-full border-none"></iframe>
+                            </div>
+                        )}
+
+                        {activeTab === 'reward' && (
+                            <div className="w-full h-full rounded-3xl overflow-hidden animate-pop-in border border-slate-100 shadow-sm bg-white">
+                                <iframe src={`part3.html?level=${level}`} className="w-full h-full border-none"></iframe>
+                            </div>
+                        )}
+
+                        {/* 新增：上報漏洞助手區域 */}
+                        {activeTab === 'report' && (
+                            <div className="w-full h-full rounded-3xl overflow-hidden animate-pop-in border border-slate-100 shadow-sm bg-white">
+                                <iframe src="part7.html" className="w-full h-full border-none"></iframe>
+                            </div>
+                        )}
+                    </main>
+
+                    {isThemeModalOpen && <ThemeModal currentLevel={level} currentTheme={currentTheme} setTheme={(theme) => { setCurrentTheme(theme); setIsThemeModalOpen(false); }} onClose={() => setIsThemeModalOpen(false)} />}
+                    {isUserModalOpen && <UserModal currentAvatar={currentAvatar} setAvatar={(avatar) => { setCurrentAvatar(avatar); setIsUserModalOpen(false); }} onClose={() => setIsUserModalOpen(false)} />}
+
+                    <nav className="nav-bar">
+                        <div className={`nav-item ${activeTab==='home'?'active':''}`} onClick={() => setActiveTab('home')}>
+                            <i className="fas fa-microchip block text-[22px] mb-1"></i><span className="text-[10px] font-black tracking-widest">首頁</span>
+                        </div>
+                        <div className={`nav-item ${activeTab==='checkin'?'active':''}`} onClick={() => setActiveTab('checkin')}>
+                            <i className="fas fa-fire block text-[22px] mb-1"></i><span className="text-[10px] font-black tracking-widest">打卡</span>
+                        </div>
+                        
+                        <div className={`nav-item ${activeTab==='race'?'active':''}`} onClick={() => setActiveTab('race')}>
+                            <i className="fas fa-stopwatch block text-[22px] mb-1"></i><span className="text-[10px] font-black tracking-widest">競賽</span>
+                        </div>
+
+                        <div className={`nav-item ${activeTab==='leaderboard'?'active':''}`} onClick={() => setActiveTab('leaderboard')}>
+                            <i className="fas fa-chart-line block text-[22px] mb-1"></i><span className="text-[10px] font-black tracking-widest">榜單</span>
+                        </div>
+
+                        <div className={`nav-item ${activeTab==='reward'?'active':''}`} onClick={() => setActiveTab('reward')}>
+                            <div className="relative inline-block">
+                                <i className="fas fa-trophy block text-[22px] mb-1"></i>
+                                {unclaimedCount > 0 && (
+                                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
+                                        {unclaimedCount}
+                                    </span>
+                                )}
+                            </div>
+                            <span className="text-[10px] font-black tracking-widest block">獎勵</span>
+                        </div>
+                    </nav>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

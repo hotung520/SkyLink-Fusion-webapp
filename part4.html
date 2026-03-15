@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SkyLink Fusion - 系統初始化</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body { 
+            font-family: 'Noto Sans TC', sans-serif; 
+            /* 科技感漸層背景，呼應主系統色系 */
+            background: linear-gradient(135deg, #0891b2 0%, #1e3a8a 100%); 
+            margin: 0; 
+            height: 100vh; 
+            overflow: hidden; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            color: white; 
+        }
+        
+        /* --- 三地節點連線動畫 --- */
+        .node-container { position: relative; width: 140px; height: 140px; margin-bottom: 25px; }
+        
+        .node { 
+            position: absolute; 
+            width: 28px; 
+            height: 28px; 
+            background: #ffffff; 
+            border-radius: 50%; 
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.8); 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #0891b2;
+            font-size: 12px;
+            font-weight: 900;
+        }
+        
+        /* 深圳 (頂部) */
+        .node-sz { top: 0; left: 50%; transform: translateX(-50%); animation: pulse-center 1.5s infinite alternate; }
+        /* 香港 (左下) */
+        .node-hk { bottom: 15px; left: 15px; animation: pulse 1.5s infinite alternate; animation-delay: 0.5s; }
+        /* 澳門 (右下) */
+        .node-mo { bottom: 15px; right: 15px; animation: pulse 1.5s infinite alternate; animation-delay: 1s; }
+        
+        /* 節點文字 */
+        .node::after { content: attr(data-city); position: absolute; bottom: -22px; color: #bae6fd; font-size: 11px; letter-spacing: 1px; }
+
+        /* 連接線 */
+        .line { position: absolute; background: rgba(255, 255, 255, 0.2); z-index: -1; }
+        .line-1 { width: 2px; height: 85px; top: 20px; left: 40px; transform: rotate(35deg); }
+        .line-2 { width: 2px; height: 85px; top: 20px; right: 40px; transform: rotate(-35deg); }
+        .line-3 { width: 85px; height: 2px; bottom: 28px; left: 28px; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 10px rgba(255,255,255,0.4); }
+            100% { transform: scale(1.2); box-shadow: 0 0 25px rgba(255,255,255,1); }
+        }
+        @keyframes pulse-center {
+            0% { transform: translateX(-50%) scale(1); box-shadow: 0 0 10px rgba(255,255,255,0.4); }
+            100% { transform: translateX(-50%) scale(1.2); box-shadow: 0 0 25px rgba(255,255,255,1); }
+        }
+
+        /* --- 載入進度條 --- */
+        .progress-bar { width: 240px; height: 6px; background: rgba(255, 255, 255, 0.15); border-radius: 10px; overflow: hidden; margin-top: 30px; }
+        .progress-fill { height: 100%; background: #22d3ee; width: 0%; animation: fillUp 2.8s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes fillUp { 0% { width: 0%; } 40% { width: 60%; } 80% { width: 90%; } 100% { width: 100%; } }
+
+        /* --- 動態輪播文字 --- */
+        .status-text { position: absolute; width: 100%; text-align: center; opacity: 0; font-size: 12px; font-weight: bold; color: #cffafe; letter-spacing: 1px; }
+        .status-1 { animation: textShow 0.9s ease-in-out 0s forwards; }
+        .status-2 { animation: textShow 0.9s ease-in-out 0.9s forwards; }
+        .status-3 { animation: textShow 1.0s ease-in-out 1.8s forwards; }
+        @keyframes textShow { 0% { opacity: 0; transform: translateY(5px); } 20% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-5px); } }
+
+        /* 元素浮現動畫 */
+        .fade-in { opacity: 0; animation: fadeIn 0.8s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 徽章樣式 */
+        .feature-badge { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: bold; backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body>
+
+    <div class="node-container fade-in">
+        <div class="line line-1"></div>
+        <div class="line line-2"></div>
+        <div class="line line-3"></div>
+        <div class="node node-sz" data-city="深圳"><i class="fas fa-paper-plane"></i></div>
+        <div class="node node-hk" data-city="香港"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="node node-mo" data-city="澳門"><i class="fas fa-camera"></i></div>
+    </div>
+
+    <div class="text-center fade-in" style="animation-delay: 0.3s;">
+        <h2 class="text-xs font-black text-cyan-300 tracking-[0.2em] mb-1">SKYLINK FUSION</h2>
+        <h1 class="text-2xl font-black tracking-widest mb-4 drop-shadow-lg text-white">
+            交流 ‧ 融創 ‧ 想未來
+        </h1>
+    </div>
+    
+    <div class="flex gap-2 mb-6 fade-in" style="animation-delay: 0.6s;">
+        <div class="feature-badge"><i class="fas fa-satellite-dish mr-1 text-cyan-300"></i>低空打卡</div>
+        <div class="feature-badge"><i class="fas fa-heart-pulse mr-1 text-pink-300"></i>健康探索</div>
+        <div class="feature-badge"><i class="fas fa-hands-holding-circle mr-1 text-yellow-300"></i>三地交融</div>
+    </div>
+
+    <div class="relative w-full h-6 fade-in" style="animation-delay: 0.5s;">
+        <div class="status-text status-1"><i class="fas fa-satellite animate-spin-slow mr-2"></i>初始化低空探索衛星網絡...</div>
+        <div class="status-text status-2"><i class="fas fa-map-location-dot animate-bounce mr-2"></i>同步深港澳實景地標與任務資料...</div>
+        <div class="status-text status-3"><i class="fas fa-rocket mr-2"></i>凝聚創意能量，系統即將啟動！</div>
+    </div>
+
+    <div class="progress-bar fade-in" style="animation-delay: 0.5s;">
+        <div class="progress-fill"></div>
+    </div>
+
+    <p class="text-[10px] text-cyan-100/60 mt-6 fade-in text-center px-10" style="animation-delay: 1.2s;">
+        支持青年參與國家建設，共同塑造美好未來
+    </p>
+
+</body>
+</html>

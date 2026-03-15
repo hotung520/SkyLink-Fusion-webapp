@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: transparent; margin: 0; padding: 10px; }
+        
+        /* 預設卡片樣式 */
+        .coupon { border-left: 8px dashed #fbbf24; transition: all 0.3s ease; }
+        .locked { filter: grayscale(100%); opacity: 0.6; }
+        
+        /* 領取按鈕彈跳變色動畫 */
+        .claim-anim {
+            animation: popCheck 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes popCheck {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.85); }
+            100% { transform: scale(1); background-color: #22c55e; color: white; } /* 轉為綠色 */
+        }
+
+        /* 慶祝煙花粒子特效 */
+        .confetti {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 50;
+            animation: shoot 0.6s ease-out forwards;
+        }
+        @keyframes shoot {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="reward-container" class="space-y-4 pb-10 overflow-hidden"></div>
+
+    <script>
+        // 1. 從 URL 獲取當前等級
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentLevel = parseInt(urlParams.get('level')) || 1;
+
+        // 2. 從 localStorage 讀取「已領取」的紀錄，避免重整後又可以領
+        let claimedRewards = JSON.parse(localStorage.getItem('claimedRewards')) || [];
+
+        const REWARDS = [
+            { id: 'r1', reqLevel: 2, title: '深港澳交通一票通 (8折)', desc: '跨城通行優惠', icon: 'fas fa-subway', color: 'text-blue-500' },
+            { id: 'r2', reqLevel: 5, title: '無人機外賣免運券', desc: '美團低空配送專屬', icon: 'fas fa-helicopter', color: 'text-orange-500' },
+            { id: 'r3', reqLevel: 10, title: '大館文化展覽免費門票', desc: '香港實地文創獎勵', icon: 'fas fa-ticket-alt', color: 'text-rose-500' },
+            { id: 'r4', reqLevel: 50, title: '大疆(DJI)無人機 9折券', desc: '終極硬核科技獎勵', icon: 'fas fa-video', color: 'text-slate-800' },
+        ];
+
+        const container = document.getElementById('reward-container');
+
+        // 3. 渲染畫面函數
+        function render() {
+            let html = `
+                <div class="bg-amber-50 p-4 rounded-2xl border border-amber-200 mb-6 text-center shadow-sm">
+                    <p class="text-xs font-bold text-amber-700">當前等級</p>
+                    <h2 class="text-2xl font-black text-amber-500">Lv. ${currentLevel} <span class="text-sm">/ 500</span></h2>
+                    <p class="text-[10px] text-amber-600 mt-1">每次成功打卡可升一級！</p>
+                </div>
+            `;
+
+            REWARDS.forEach(reward => {
+                const isUnlocked = currentLevel >= reward.reqLevel;
+                const isClaimed = claimedRewards.includes(reward.id);
+                
+                let buttonHtml = '';
+                if (!isUnlocked) {
+                    // 未達等級
+                    buttonHtml = `<button class="bg-slate-200 text-slate-400 text-xs font-black px-3 py-2 rounded-xl" disabled>未解鎖</button>`;
+                } else if (isClaimed) {
+                    // 已經領取過
+                    buttonHtml = `<button class="bg-emerald-500 text-white text-xs font-black px-3 py-2 rounded-xl shadow-md cursor-default"><i class="fas fa-check mr-1"></i>已領取</button>`;
+                } else {
+                    // 可領取
+                    buttonHtml = `<button id="btn-${reward.id}" onclick="claimReward('${reward.id}', event)" class="bg-amber-500 text-white text-xs font-black px-3 py-2 rounded-xl shadow-md active:scale-95 hover:bg-amber-400 transition-transform">領取</button>`;
+                }
+
+                html += `
+                    <div id="card-${reward.id}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between relative overflow-hidden ${isUnlocked ? (isClaimed ? 'border-emerald-200 bg-emerald-50/30' : 'coupon') : 'locked'} transition-all duration-300">
+                        <div class="flex items-center gap-4 relative z-10">
+                            <div class="w-12 h-12 ${isClaimed ? 'bg-emerald-100 text-emerald-500' : 'bg-slate-100 ' + reward.color} rounded-full flex items-center justify-center text-xl transition-colors duration-300">
+                                <i class="${reward.icon}"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-black ${isClaimed ? 'text-emerald-700' : 'text-slate-800'} text-sm transition-colors duration-300">${reward.title}</h3>
+                                <p class="text-[10px] text-slate-500 font-bold">${reward.desc}</p>
+                                ${!isUnlocked ? `<p class="text-[10px] text-red-500 font-bold mt-1"><i class="fas fa-lock"></i> 需要 Lv.${reward.reqLevel} 解鎖</p>` : ''}
+                            </div>
+                        </div>
+                        <div class="relative z-10">
+                            ${buttonHtml}
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // 4. 領取動作與特效邏輯
+        window.claimReward = function(id, event) {
+            const btn = document.getElementById(`btn-${id}`);
+            const card = document.getElementById(`card-${id}`);
+            
+            // 替換按鈕樣式並播放動畫
+            btn.classList.add('claim-anim');
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i>已領取';
+            btn.disabled = true;
+
+            // 在滑鼠點擊的位置觸發煙花特效
+            createConfetti(event.clientX, event.clientY, card);
+
+            // 記錄至 localStorage，並在動畫結束後刷新 UI 狀態
+            setTimeout(() => {
+                claimedRewards.push(id);
+                localStorage.setItem('claimedRewards', JSON.stringify(claimedRewards));
+                render(); // 刷新成已領取的卡片狀態
+            }, 600);
+        };
+
+        // 5. 煙花粒子生成器
+        function createConfetti(x, y, parentElement) {
+            // 計算點擊位置相對於卡片的相對座標
+            const rect = parentElement.getBoundingClientRect();
+            const relX = x - rect.left;
+            const relY = y - rect.top;
+
+            for (let i = 0; i < 15; i++) {
+                const confetti = document.createElement('div');
+                confetti.classList.add('confetti');
+                
+                // 隨機噴射角度與力度
+                const angle = Math.random() * Math.PI * 2;
+                const velocity = 30 + Math.random() * 50; // 擴散範圍
+                const tx = Math.cos(angle) * velocity + 'px';
+                const ty = Math.sin(angle) * velocity + 'px';
+                
+                confetti.style.setProperty('--tx', tx);
+                confetti.style.setProperty('--ty', ty);
+                
+                // 隨機粒子顏色
+                const colors = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6'];
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                // 定位
+                confetti.style.left = relX + 'px';
+                confetti.style.top = relY + 'px';
+                
+                parentElement.appendChild(confetti);
+                
+                // 動畫結束後移除 DOM 元素
+                setTimeout(() => confetti.remove(), 600);
+            }
+        }
+
+        // 啟動首次渲染
+        render();
+    </script>
+</body>
+</html>

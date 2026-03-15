@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SkyLink Fusion - 探索排行榜</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: transparent; margin: 0; padding: 10px; }
+        
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .rank-gold { background: linear-gradient(135deg, #fef08a 0%, #eab308 100%); color: #713f12; }
+        .rank-silver { background: linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 100%); color: #334155; }
+        .rank-bronze { background: linear-gradient(135deg, #fed7aa 0%, #f97316 100%); color: #7c2d12; }
+        .progress-bar { transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body>
+    <div id="leaderboard-root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const TOTAL_LANDMARKS = 30;
+
+        const LeaderboardApp = () => {
+            const [activeTab, setActiveTab] = useState('individual');
+            const [animateKey, setAnimateKey] = useState(0);
+            
+            const [myName, setMyName] = useState('你 (Me)');
+            const [myCheckins, setMyCheckins] = useState(0);
+            const [myXp, setMyXp] = useState(0);
+
+            useEffect(() => {
+                const storedName = localStorage.getItem('accountName') || '探索者';
+                setMyName(storedName);
+
+                // 從 localStorage 精準獲取已打卡的陣列，長度即為打卡數
+                const locs = JSON.parse(localStorage.getItem('checkedInLocs') || '[]');
+                setMyCheckins(locs.length);
+
+                const storedXp = parseInt(localStorage.getItem('userXP')) || (locs.length * 100);
+                setMyXp(storedXp);
+            }, []);
+
+            useEffect(() => { setAnimateKey(prev => prev + 1); }, [activeTab]);
+
+            const getIndividualData = () => {
+                const baseData = [
+                    { id: 1, name: "陳小明 (Shenzhen)", avatar: "fas fa-user-astronaut", checkins: 28, xp: 2800 },
+                    { id: 2, name: "大衛 (Hong Kong)", avatar: "fas fa-user-ninja", checkins: 25, xp: 2500 },
+                    { id: 3, name: "瑪麗 (Macau)", avatar: "fas fa-user-tie", checkins: 22, xp: 2200 },
+                    { id: 5, name: "張學友", avatar: "fas fa-user-secret", checkins: 12, xp: 1200 },
+                    { id: 6, name: "李嘉誠", avatar: "fas fa-user-graduate", checkins: 8, xp: 800 },
+                    // 使用你真實的打卡資料 (從 0 開始)
+                    { id: 4, name: `${myName} (Me)`, avatar: "fas fa-user", checkins: myCheckins, xp: myXp, isMe: true }
+                ];
+                return baseData.sort((a, b) => b.checkins - a.checkins).map((item, index) => ({ ...item, rank: index + 1 }));
+            };
+
+            const getTeamData = () => {
+                // 為了呈現組隊效果，我們模擬隊友分別打了 10 個和 8 個
+                const teammate1 = 10;
+                const teammate2 = 8;
+                // 你的團隊總分 = 你的真實打卡數 + 隊友打卡數
+                const myTeamCheckins = Math.min(TOTAL_LANDMARKS, myCheckins + teammate1 + teammate2); 
+                const myTeamXp = myTeamCheckins * 100 + 500; 
+
+                const baseData = [
+                    { id: 1, name: "深港澳先鋒隊", members: ["小明(10)", "大衛(10)", "瑪麗(10)"], checkins: 30, xp: 9000 },
+                    { id: 3, name: "灣區探索者", members: ["王五(8)", "趙六(6)", "錢七(6)"], checkins: 20, xp: 6000 },
+                    { id: 4, name: "SkyLink特搜", members: ["孫八(5)", "周九(5)", "吳十(5)"], checkins: 15, xp: 4500 },
+                    // 你的隊伍即時反映你的進度
+                    { id: 2, name: "創想未來 (你的隊伍)", members: [`${myName}(${myCheckins})`, `張三(${teammate1})`, `李四(${teammate2})`], checkins: myTeamCheckins, xp: myTeamXp, isMyTeam: true }
+                ];
+                return baseData.sort((a, b) => b.checkins - a.checkins).map((item, index) => ({ ...item, rank: index + 1 }));
+            };
+
+            const currentData = activeTab === 'individual' ? getIndividualData() : getTeamData();
+
+            const getRankStyle = (rank) => {
+                if (rank === 1) return { badge: 'rank-gold', icon: 'fas fa-crown', size: 'text-2xl' };
+                if (rank === 2) return { badge: 'rank-silver', icon: 'fas fa-medal', size: 'text-xl' };
+                if (rank === 3) return { badge: 'rank-bronze', icon: 'fas fa-award', size: 'text-xl' };
+                return { badge: 'bg-slate-100 text-slate-500', icon: null, size: 'text-base' };
+            };
+
+            return (
+                <div className="space-y-4 pb-10">
+                    <div className="flex justify-between items-end mb-2">
+                        <h2 className="text-xl font-black text-slate-800"><i className="fas fa-trophy text-yellow-400 mr-2"></i>探索排行榜</h2>
+                    </div>
+
+                    <div className="flex bg-slate-200 p-1 rounded-2xl shadow-inner">
+                        <button onClick={() => setActiveTab('individual')} className={`flex-1 py-2.5 rounded-xl font-black text-sm transition-all duration-300 ${activeTab === 'individual' ? 'bg-white text-cyan-600 shadow-sm' : 'text-slate-500'}`}><i className="fas fa-user mr-2"></i>個人英雄榜</button>
+                        <button onClick={() => setActiveTab('team')} className={`flex-1 py-2.5 rounded-xl font-black text-sm transition-all duration-300 ${activeTab === 'team' ? 'bg-white text-cyan-600 shadow-sm' : 'text-slate-500'}`}><i className="fas fa-users mr-2"></i>聯盟組隊榜</button>
+                    </div>
+
+                    {activeTab === 'team' && (
+                        <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-3 flex gap-3 items-center animate-fade-in shadow-sm">
+                            <div className="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-500 shrink-0"><i className="fas fa-link"></i></div>
+                            <div className="text-xs text-cyan-800"><span className="font-black">組隊共享機制已啟動！</span><br/><span className="opacity-80">隊友在不同地點打卡，地標收集進度將自動合併。</span></div>
+                        </div>
+                    )}
+
+                    <div key={animateKey} className="space-y-3 pt-2">
+                        {currentData.map((item, index) => {
+                            const style = getRankStyle(item.rank);
+                            const isHighlight = item.isMe || item.isMyTeam;
+                            const progressPercentage = (item.checkins / TOTAL_LANDMARKS) * 100;
+
+                            return (
+                                <div key={item.id} className={`relative p-4 rounded-2xl border shadow-sm flex items-center gap-3 animate-fade-in ${isHighlight ? 'bg-cyan-50 border-cyan-300 ring-2 ring-cyan-200' : 'bg-white border-slate-100'}`} style={{ animationDelay: `${index * 0.08}s` }}>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black shadow-sm shrink-0 ${style.badge}`}>
+                                        {style.icon ? <i className={`${style.icon} ${style.size}`}></i> : item.rank}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h3 className={`font-black truncate text-sm ${isHighlight ? 'text-cyan-800' : 'text-slate-800'}`}>{item.name}</h3>
+                                            <span className="text-xs font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md shrink-0">{item.checkins} / {TOTAL_LANDMARKS}</span>
+                                        </div>
+                                        {activeTab === 'team' ? (
+                                            <p className="text-[10px] text-slate-400 font-bold truncate">隊員: {item.members.join(', ')}</p>
+                                        ) : (
+                                            <p className="text-[10px] text-cyan-600 font-bold"><i className="fas fa-star text-yellow-400 mr-1"></i>{item.xp} XP</p>
+                                        )}
+                                        <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
+                                            <div className={`h-full rounded-full progress-bar ${isHighlight ? 'bg-cyan-500' : (item.rank <= 3 ? 'bg-yellow-400' : 'bg-slate-300')}`} style={{ width: `${progressPercentage}%` }}></div>
+                                        </div>
+                                    </div>
+                                    {isHighlight && <div className="absolute -top-2 -right-2 bg-cyan-500 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-md transform rotate-6">這就是你!</div>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('leaderboard-root'));
+        root.render(<LeaderboardApp />);
+    </script>
+</body>
+</html>
